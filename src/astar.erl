@@ -12,7 +12,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 %% API
--export([graph/1, search/3, search/4]).
+-export([graph/3, search/3, search/4]).
 
 -record(graph, {width = 0, height = 0, grids = undefined}).
 
@@ -24,31 +24,31 @@
     parent = undefined
 }).
 
-graph(Points) ->
-    generate_map_grids(Points, #graph{grids = array:new()}).
+graph(Points, Width, Height) ->
+    case length(Points) == Height of
+        true ->
+            generate_map_grids(Points, #graph{grids = array:new(Height), width = Width, height = Height});
+        false ->
+            {error, badarg}
+    end.
 
 generate_map_grids(Points, Graph) ->
     generate_map_grids(Points, 0, Graph).
 
-generate_map_grids([], Index, Graph) ->
-    Graph#graph{height = Index};
+generate_map_grids([], _Index, Graph) -> Graph;
 generate_map_grids([H|T], Index, Graph = #graph{grids = MapGridsArray, width = Width}) when is_list(H) ->
-    {ok, RowLength, RowGridsArray} = generate_row_grids(H),
-    case Width == 0 orelse Width == RowLength of
+    case length(H) == Width of
         true ->
-            generate_map_grids(T, Index + 1,
-                Graph#graph{
-                    grids = array:set(Index, RowGridsArray, MapGridsArray),
-                    width = RowLength
-                });
+            RowGridsArray = generate_row_grids(H, array:new(Width)),
+            generate_map_grids(T, Index + 1, Graph#graph{grids = array:set(Index, RowGridsArray, MapGridsArray)});
         false ->
             erlang:throw({error, badarg})
     end.
 
-generate_row_grids(Row) ->
-    generate_row_grids(Row, 0, array:new()).
-generate_row_grids([], Index, Array) ->
-    {ok, Index, Array};
+generate_row_grids(Row, Array) ->
+    generate_row_grids(Row, 0, Array).
+generate_row_grids([], _Index, Array) ->
+    Array;
 generate_row_grids([H|T], Index, Array) when H == 0 orelse H == 1 ->
     generate_row_grids(T, Index + 1, array:set(Index, H, Array)).
 
@@ -58,11 +58,11 @@ is_walk_grid(X, Y, #graph{width = Width, height = Height})
     when X < 0 orelse X >= Width orelse Y < 0 orelse Y >= Height ->
     false;
 is_walk_grid(X, Y, #graph{grids = Grids}) ->
-    case array:get(X, Grids) of
+    case array:get(Y, Grids) of
         undefined ->
             false;
         Row ->
-            case array:get(Y, Row) of
+            case array:get(X, Row) of
                 undefined ->
                     false;
                 V ->
@@ -239,7 +239,7 @@ basic_test() ->
         [0,0,0,1,0,0,0,0,0,0], % 7
         [0,0,0,1,0,0,0,0,0,0], % 8
         [0,0,0,1,0,0,0,0,0,0]  % 9
-    ]),
+    ], 10, 10),
     %% {6, 4} -> {9, 9} heuristics: manhattan
     [{0,0}, {0,1}, {1,1}, {2,1}, {3,1}, {4,1}, {4,2}, {4,3}, {4,4}, {4,5}, {4,6}, {4,7},
         {4,8}, {4,9}, {5,9}, {6,9}, {7,9}, {8,9}, {9,9}] = astar:search(Graph, {0, 0}, {9, 9}, [{heuristics, manhattan}]),
@@ -262,7 +262,7 @@ basic_test() ->
         [0,0,0,1,0,0,0,0,0,0], % 7
         [0,0,0,1,0,0,0,0,0,0], % 8
         [0,0,0,1,0,0,0,0,0,0]  % 9
-    ]),
+    ], 10, 10),
 
     ?assertEqual(none, astar:search(Graph1, {0, 0}, {9, 9}, [{heuristics, manhattan}])),
 
