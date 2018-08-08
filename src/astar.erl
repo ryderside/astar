@@ -12,7 +12,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 %% API
--export([graph/3, search/3, search/4]).
+-export([graph/1, search/3, search/4]).
 
 -record(graph, {width = 0, height = 0, grids = undefined}).
 
@@ -24,33 +24,31 @@
     parent = undefined
 }).
 
-graph(Points, Width, Height) ->
-    case length(Points) == Height of
-        true ->
-            generate_map_grids(Points, #graph{grids = array:new(Height), width = Width, height = Height});
-        false ->
-            {error, badarg}
-    end.
+graph(Points) ->
+    {ok, Height, Width, MapGrids} = generate_map_grids(Points),
+    #graph{height = Height, width = Width, grids = MapGrids}.
 
-generate_map_grids(Points, Graph) ->
-    generate_map_grids(Points, 0, Graph).
+generate_map_grids(Points) ->
+    generate_map_grids(Points, 0, 0, []).
 
-generate_map_grids([], _Index, Graph) -> Graph;
-generate_map_grids([H|T], Index, Graph = #graph{grids = MapGridsArray, width = Width}) when is_list(H) ->
-    case length(H) == Width of
+generate_map_grids([], Height, Width, GridsList) ->
+    {ok, Height, Width, array:from_list(lists:reverse(GridsList))};
+generate_map_grids([H|T], Height, Width, GridsList) when is_list(H) ->
+    {ok, RowArray} = generate_row_grids(H),
+    case Width == 0 orelse array:size(RowArray) == Width of
         true ->
-            RowGridsArray = generate_row_grids(H, array:new(Width)),
-            generate_map_grids(T, Index + 1, Graph#graph{grids = array:set(Index, RowGridsArray, MapGridsArray)});
+            generate_map_grids(T, Height + 1, array:size(RowArray), [RowArray|GridsList]);
         false ->
             erlang:throw({error, badarg})
     end.
 
-generate_row_grids(Row, Array) ->
-    generate_row_grids(Row, 0, Array).
-generate_row_grids([], _Index, Array) ->
-    Array;
-generate_row_grids([H|T], Index, Array) when H == 0 orelse H == 1 ->
-    generate_row_grids(T, Index + 1, array:set(Index, H, Array)).
+generate_row_grids(Row) ->
+    generate_row_grids(Row, []).
+
+generate_row_grids([], List) ->
+    {ok, array:from_list(lists:reverse(List))};
+generate_row_grids([H|T], List) when H == 0 orelse H == 1 ->
+    generate_row_grids(T, [H|List]).
 
 is_walk_grid({X, Y}, Graph) ->
     is_walk_grid(X, Y, Graph).
@@ -239,7 +237,7 @@ basic_test() ->
         [0,0,0,1,0,0,0,0,0,0], % 7
         [0,0,0,1,0,0,0,0,0,0], % 8
         [0,0,0,1,0,0,0,0,0,0]  % 9
-    ], 10, 10),
+    ]),
     %% {6, 4} -> {9, 9} heuristics: manhattan
     [{0,0}, {0,1}, {0,2}, {0,3}, {0,4}, {1,4}, {2,4}, {3,4}, {4,4}, {4,5}, {4,6}, {4,7}, {4,8},
         {4,9}, {5,9}, {6,9}, {7,9}, {8,9}, {9,9}] = astar:search(Graph, {0, 0}, {9, 9}, [{heuristics, manhattan}]),
@@ -262,7 +260,7 @@ basic_test() ->
         [0,0,0,1,0,0,0,0,0,0], % 7
         [0,0,0,1,0,0,0,0,0,0], % 8
         [0,0,0,1,0,0,0,0,0,0]  % 9
-    ], 10, 10),
+    ]),
 
     ?assertEqual(none, astar:search(Graph1, {0, 0}, {9, 9}, [{heuristics, manhattan}])),
 
