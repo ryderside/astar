@@ -241,11 +241,12 @@ basic_test() ->
         [0,0,0,1,0,0,0,0,0,0]  % 9
     ]),
     %% {6, 4} -> {9, 9} heuristics: manhattan
-    Path  = astar:search(Graph, {0, 0}, {9, 9}, [{heuristics, manhattan}]),
-    ?assert(is_list(Path)),
+    [{0,0}, {0,1}, {1,1}, {2,1}, {3,1}, {4,1}, {4,2}, {4,3}, {4,4}, {4,5}, {4,6}, {4,7},
+        {4,8}, {4,9}, {5,9}, {6,9}, {7,9}, {8,9}, {9,9}] = astar:search(Graph, {0, 0}, {9, 9}, [{heuristics, manhattan}]),
     %% {6, 4} -> {9, 9} heuristics: diagonal
-    Path1 = astar:search(Graph, {0, 0}, {9, 9}, [{heuristics, diagonal}]),
-    ?assert(is_list(Path1)),
+    [{0,0}, {1,1}, {2,1}, {3,1}, {4,2}, {4,3}, {5,4}, {6,5}, {7,6}, {8,7},
+        {9,8}, {9,9}] = astar:search(Graph, {0, 0}, {9, 9}, [{heuristics, diagonal}]),
+    %% bad position start / end
     ?assertEqual({error, bad_position}, astar:search(Graph, {10,1}, {9,9}, [])),
     ?assertEqual({error, bad_position}, astar:search(Graph, {0,0}, {10,10}, [])),
 
