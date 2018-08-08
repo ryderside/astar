@@ -114,15 +114,15 @@ do_search(Graph, EndNode, OpenGbTree, ClosedDict, VisitedSets, HeuristicsType) -
 
 neighbors_nodes(manhattan, #node{x = X, y = Y}) ->
     [
-        #node{x = X, y = Y + 1},
+        #node{x = X, y = Y - 1},
         #node{x = X - 1, y = Y}, #node{x = X + 1, y = Y},
-        #node{x = X, y = Y - 1}
+        #node{x = X, y = Y + 1}
     ];
 neighbors_nodes(diagonal, #node{x = X, y = Y}) ->
     [
-        #node{x = X - 1, y = Y + 1}, #node{x = X, y = Y + 1}, #node{x = X + 1, y = Y + 1},
+        #node{x = X - 1, y = Y - 1}, #node{x = X, y = Y - 1}, #node{x = X + 1, y = Y - 1},
         #node{x = X - 1, y = Y}, #node{x = X + 1, y = Y},
-        #node{x = X - 1, y = Y - 1}, #node{x = X, y = Y - 1}, #node{x = X + 1, y = Y - 1}
+        #node{x = X - 1, y = Y + 1}, #node{x = X, y = Y + 1}, #node{x = X + 1, y = Y + 1}
     ].
 
 %% 获取相邻的node
