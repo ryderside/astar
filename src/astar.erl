@@ -32,12 +32,12 @@ generate_map_grids(Points) ->
     generate_map_grids(Points, 0, 0, []).
 
 generate_map_grids([], Height, Width, GridsList) ->
-    {ok, Height, Width, array:from_list(lists:reverse(GridsList))};
+    {ok, Height, Width, erlang:list_to_tuple(lists:reverse(GridsList))};
 generate_map_grids([H|T], Height, Width, GridsList) when is_list(H) ->
-    {ok, RowArray} = generate_row_grids(H),
-    case Width == 0 orelse array:size(RowArray) == Width of
+    Row = generate_row_grids(H),
+    case Width == 0 orelse erlang:tuple_size(Row) == Width of
         true ->
-            generate_map_grids(T, Height + 1, array:size(RowArray), [RowArray|GridsList]);
+            generate_map_grids(T, Height + 1, erlang:tuple_size(Row), [Row|GridsList]);
         false ->
             erlang:throw({error, badarg})
     end.
@@ -46,7 +46,7 @@ generate_row_grids(Row) ->
     generate_row_grids(Row, []).
 
 generate_row_grids([], List) ->
-    {ok, array:from_list(lists:reverse(List))};
+    erlang:list_to_tuple(lists:reverse(List));
 generate_row_grids([H|T], List) when H == 0 orelse H == 1 ->
     generate_row_grids(T, [H|List]).
 
@@ -56,11 +56,11 @@ is_walk_grid(X, Y, #graph{width = Width, height = Height})
     when X < 0 orelse X >= Width orelse Y < 0 orelse Y >= Height ->
     false;
 is_walk_grid(X, Y, #graph{grids = Grids}) ->
-    case array:get(Y, Grids) of
+    case element(Y + 1, Grids) of
         undefined ->
             false;
         Row ->
-            case array:get(X, Row) of
+            case element(X + 1, Row) of
                 undefined ->
                     false;
                 V ->
@@ -79,14 +79,14 @@ search(Graph, Start, End, Options) ->
         false ->
             {error, bad_position};
         true ->
-            OpenGbTree = gb_trees:from_orddict([]),
+            OpenGbSets = gb_sets:new(),
             ClosedDict = dict:new(),
             VisitedSets = sets:new(),
             StartNode = pos2node(Start),
             EndNode = pos2node(End),
             HeuristicsType = proplists:get_value(heuristics, Options, diagonal),
-            OpenGbTree0 = push_open_nodes(StartNode#node{g = 0, h = h(HeuristicsType, StartNode, EndNode)}, OpenGbTree),
-            do_search(Graph, EndNode, OpenGbTree0, ClosedDict, VisitedSets, HeuristicsType)
+            OpenGbSets0 = push_open_nodes(StartNode#node{g = 0, h = h(HeuristicsType, StartNode, EndNode)}, OpenGbSets),
+            do_search(Graph, EndNode, OpenGbSets0, ClosedDict, VisitedSets, HeuristicsType)
     end.
 
 do_search(Graph, EndNode, OpenGbTree, ClosedDict, VisitedSets, HeuristicsType) ->
@@ -124,9 +124,9 @@ neighbors_nodes(diagonal, #node{x = X, y = Y}) ->
     ].
 
 %% 获取相邻的node
-push_neighbors([], _EndNode, _CurrentNode, _Graph, _HeuristicsType, OpenGbTree, ClosedDict, VisitedSets) ->
-    {OpenGbTree, ClosedDict, VisitedSets};
-push_neighbors([NeighborsNode = #node{x = X, y = Y}|T], EndNode, CurrentNode, Graph, HeuristicsType, OpenGbTree, ClosedDict, VisitedSets) ->
+push_neighbors([], _EndNode, _CurrentNode, _Graph, _HeuristicsType, OpenGbSets, ClosedDict, VisitedSets) ->
+    {OpenGbSets, ClosedDict, VisitedSets};
+push_neighbors([NeighborsNode = #node{x = X, y = Y}|T], EndNode, CurrentNode, Graph, HeuristicsType, OpenGbSets, ClosedDict, VisitedSets) ->
     case is_walk_grid(X, Y, Graph) andalso not is_closed(X, Y, ClosedDict) of
         true -> %% 可行走点，没有在closed列表
             %% 计算子节点G值 = 父节点G值 + G值开销
@@ -136,25 +136,25 @@ push_neighbors([NeighborsNode = #node{x = X, y = Y}|T], EndNode, CurrentNode, Gr
             NeighborsNode0 = NeighborsNode#node{g = G, h = H, parent = {CurrentNode#node.x, CurrentNode#node.y}},
             case sets:is_element({X, Y}, VisitedSets) of
                 true -> %% 已经寻到过的点，更新open列表node
-                    OpenGbTree0 = rescore_open_node(NeighborsNode0, OpenGbTree),
-                    push_neighbors(T, EndNode, CurrentNode, Graph, HeuristicsType, OpenGbTree0, ClosedDict, VisitedSets);
+                    OpenGbSets0 = rescore_open_node(NeighborsNode0, OpenGbSets),
+                    push_neighbors(T, EndNode, CurrentNode, Graph, HeuristicsType, OpenGbSets0, ClosedDict, VisitedSets);
                 false ->
-                    OpenGbTree0 = push_open_nodes(NeighborsNode0, OpenGbTree),
+                    OpenGbSets0 = push_open_nodes(NeighborsNode0, OpenGbSets),
                     VisitedSets0 = sets:add_element({X, Y}, VisitedSets),
-                    push_neighbors(T, EndNode, CurrentNode, Graph, HeuristicsType, OpenGbTree0, ClosedDict, VisitedSets0)
+                    push_neighbors(T, EndNode, CurrentNode, Graph, HeuristicsType, OpenGbSets0, ClosedDict, VisitedSets0)
             end;
         false ->
-            push_neighbors(T, EndNode, CurrentNode, Graph, HeuristicsType, OpenGbTree, ClosedDict, VisitedSets)
+            push_neighbors(T, EndNode, CurrentNode, Graph, HeuristicsType, OpenGbSets, ClosedDict, VisitedSets)
     end.
 
 %% 选择代价最小的点
-dequeue_cheapest_node(OpenGbTree) ->
-    case gb_trees:is_empty(OpenGbTree) of
+dequeue_cheapest_node(OpenGbSets) ->
+    case gb_sets:is_empty(OpenGbSets) of
         true ->
             none;
         false ->
-            {{_Score, Node} = Key, _} = gb_trees:smallest(OpenGbTree),
-            {ok, gb_trees:delete(Key, OpenGbTree), Node}
+            {{_Score, Node}, OpenGbSets0} = gb_sets:take_smallest(OpenGbSets),
+            {ok, OpenGbSets0, Node}
     end.
 
 is_closed(X, Y, ClosedDict) ->
@@ -183,32 +183,32 @@ h(diagonal, #node{x = X1, y = Y1}, #node{x = X2, y = Y2}) ->
 
 %% 更新已经在open列表的节点信息
 %% f值越小则替换
-rescore_open_node(Node = #node{x = X, y = Y, h = H, g = G}, OpenGbTree) ->
-    case search_open_node(X, Y, OpenGbTree) of
+rescore_open_node(Node = #node{x = X, y = Y, h = H, g = G}, OpenGbSets) ->
+    case search_open_node(X, Y, OpenGbSets) of
         {ok, Key = {_Score, #node{h = H1, g = G1}}} ->
             case H + G < H1 + G1 of
                 true -> %% 代价更小
-                    OpenGbTree0 = gb_trees:delete(Key, OpenGbTree),
-                    push_open_nodes(Node, OpenGbTree0);
+                    OpenGbSets0 = gb_sets:delete(Key, OpenGbSets),
+                    push_open_nodes(Node, OpenGbSets0);
                 false ->
-                    OpenGbTree
+                    OpenGbSets
             end;
         _ ->
-            push_open_nodes(Node, OpenGbTree)
+            push_open_nodes(Node, OpenGbSets)
     end.
 
 search_open_node(X, Y, OpenGbTree) ->
-    Iter = gb_trees:iterator(OpenGbTree),
-    do_search_open_node(gb_trees:next(Iter), X, Y).
+    Iter = gb_sets:iterator(OpenGbTree),
+    do_search_open_node(gb_sets:next(Iter), X, Y).
 do_search_open_node(none, _X, _Y) ->
     none;
-do_search_open_node({Key = {_Score, #node{x = X, y = Y}}, _Value, _Iter}, X, Y) ->
+do_search_open_node({Key = {_Score, #node{x = X, y = Y}}, _Iter}, X, Y) ->
     {ok, Key};
-do_search_open_node({_Key, _Value, Iter}, X, Y) ->
-    do_search_open_node(gb_trees:next(Iter), X, Y).
+do_search_open_node({_Key, Iter}, X, Y) ->
+    do_search_open_node(gb_sets:next(Iter), X, Y).
 
-push_open_nodes(#node{g = G, h = H} = Node, OpenGbTree) ->
-    gb_trees:insert({G + H, Node}, true, OpenGbTree).
+push_open_nodes(#node{g = G, h = H} = Node, OpenGbSets) ->
+    gb_sets:insert({G + H, Node}, OpenGbSets).
 
 push_closed_node(#node{x = X, y = Y} = Node, ClosedDict) ->
     dict:store({X, Y}, Node, ClosedDict).
